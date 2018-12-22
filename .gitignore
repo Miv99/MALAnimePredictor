@@ -1,0 +1,9 @@
+.idea
+__pycache__
+backups
+logs
+venv
+anime_database.pickle
+users_fit.pickle
+animelist_*
+users.txt
