@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import re
 import logging
 import json
+import time
 from mal_info import Anime
 from mal_info import User
 from datetime import datetime
@@ -22,8 +23,13 @@ CACHE_MAX_SIZE = 20
 
 
 class MALScraper:
-    def __init__(self):
+    def __init__(self, request_delay):
+        """
+        request_delay - delay in seconds before another request can be made
+        if a 429 Too many requests error is encountered
+        """
         self.cache = deque()
+        self.request_delay = request_delay
 
     def get_cached_result(self, url):
         for item in self.cache:
@@ -36,21 +42,30 @@ class MALScraper:
         If the content-type of response is some kind of HTML/XML, return the
         text content, otherwise return None.
         """
+        logging.debug('MALScraper: Requested "' + url + '"')
+
         # Attempt to get cached result
         cached_result = self.get_cached_result(url)
         if cached_result is not None:
             return cached_result
 
         try:
-            with closing(get(url, stream=True)) as resp:
-                # Update cache
-                self.cache.append((url, resp.content))
-                if len(self.cache) > CACHE_MAX_SIZE:
-                    self.cache.popleft()
+            while True:
+                with closing(get(url, stream=True)) as resp:
+                    # Encountered 429; sleep and try again
+                    if resp.content == b'Too Many Requests\n':
+                        logging.debug('429 Too Many Requests; sleeping for ' + str(self.request_delay) + ' seconds...')
+                        time.sleep(self.request_delay)
+                        continue
 
-                return resp.content
+                    # Update cache
+                    self.cache.append((url, resp.content))
+                    if len(self.cache) > CACHE_MAX_SIZE:
+                        self.cache.popleft()
+
+                    return resp.content
         except RequestException as e:
-            logging.debug('Error during requests to {0} : {1}'.format(url, str(e)))
+            logging.critical('MALScraper: Error during requests to {0} : {1}'.format(url, str(e)))
             raise e
 
     def get_mean_score(self, anime_id):
@@ -169,7 +184,8 @@ class MALScraper:
             reading = True
             animelist = []
             while reading:
-                paginated_animelist = json.loads(self.simple_get(ANIME_LIST_URL % (username, str((page - 1) * 300))))
+                result = self.simple_get(ANIME_LIST_URL % (username, str((page - 1) * 300)))
+                paginated_animelist = json.loads(result)
 
                 if type(paginated_animelist) is dict and paginated_animelist.get('errors') is not None:
                     raise RequestException('User does not exist or anime list is private')
@@ -179,6 +195,7 @@ class MALScraper:
                     reading = False
 
                 animelist.extend(paginated_animelist)
+                page += 1
             return animelist
         except Exception as e:
             raise e
@@ -199,7 +216,3 @@ class MALScraper:
                 score_sum += anime_info['score']
                 count += 1
         return User(username=username, mean_score=score_sum/count, anime_list=anime_list)
-
-
-scraper = MALScraper()
-print(scraper.get_user('miv99'))
