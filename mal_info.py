@@ -1,10 +1,12 @@
 class User:
-    def __init__(self, username='', mean_score=0.0, anime_list={}):
+    def __init__(self, username='', mean_score=0.0, anime_list={}, private_list_or_nonexistent=False):
         self.username = username
         self.mean_score = mean_score
         # Dict of anime_id : (watching_status, score_given_by_this_user)
         # 1 = watching, 2 = completed, 4 = dropped, 6 = ptw
         self.anime_list = anime_list
+        # Used to quickly skip users who do not exist or have private anime lists in user_collector
+        self.private_list_or_nonexistent = private_list_or_nonexistent
 
     def __repr__(self):
         return 'mal_info.User{username: ' + str(self.username) + '; mean_score:' + str(self.mean_score)\

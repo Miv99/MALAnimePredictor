@@ -1,6 +1,8 @@
 from datetime import datetime
 from mal_scraper import MALScraper
 from requests.exceptions import RequestException
+from mal_scraper import InvalidUserException
+from mal_info import User
 import pickle
 import logging
 
@@ -85,8 +87,14 @@ def collect_user_data(usernames_infile, anime_database_pickle_file_name, users_p
                         back_up(users, anime_database, users_pickle_file_name, anime_database_pickle_file_name)
                 except RequestException as e:
                     logging.critical(e)
+                except InvalidUserException as e:
+                    logging.debug(e)
+                    users[username] = User(private_list_or_nonexistent=True)
                 except Exception as e:
                     logging.fatal(e)
+            elif users[username].private_list_or_nonexistent:
+                logging.debug('user_collector: Skipping user "' + username + '"; user does not exist or has private '
+                                                                             'anime list')
             else:
                 logging.debug('user_collector: Skipping user "' + username + '"; data already exists')
 

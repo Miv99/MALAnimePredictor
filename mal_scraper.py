@@ -11,6 +11,11 @@ from mal_info import User
 from datetime import datetime
 from collections import deque
 
+
+class InvalidUserException(Exception):
+    pass
+
+
 # anime_id in %s
 ANIME_URL = 'https://myanimelist.net/anime/%s'
 ANIME_STATS_URL = 'https://myanimelist.net/anime/%s/_/stats'
@@ -188,7 +193,7 @@ class MALScraper:
                 paginated_animelist = json.loads(result)
 
                 if type(paginated_animelist) is dict and paginated_animelist.get('errors') is not None:
-                    raise RequestException('User does not exist or anime list is private')
+                    raise InvalidUserException('User does not exist or anime list is private')
 
                 # Anime lists are capped at 300 anime per page
                 if len(paginated_animelist) != 300:
