@@ -28,7 +28,7 @@ class Anime:
         self.mean_score = mean_score
         # Genres as name strings
         self.genres = genres
-        # Movie/OVA/TV/Special as a string
+        # Movie/TV/Special/OVA/ONA as a string
         self.anime_type = anime_type
         # Total number of episodes
         self.episodes = episodes

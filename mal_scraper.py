@@ -136,13 +136,19 @@ class MALScraper:
                 anime_type = 'Special'
             elif html.find('a', href='https://myanimelist.net/topanime.php?type=ova') is not None:
                 anime_type = 'OVA'
+            elif html.find('a', href='https://myanimelist.net/topanime.php?type=ona') is not None:
+                anime_type = 'ONA'
             elif html.find('a', href='https://myanimelist.net/topanime.php?type=movie') is not None:
                 anime_type = 'Movie'
             else:
                 raise Exception('This should never appear')
 
             # Get number of episodes
-            episodes = int(re.findall(r'\d+', str(html.find('div', class_='spaceit')))[0])
+            try:
+                episodes = int(re.findall(r'\d+', str(html.find('div', class_='spaceit')))[0])
+            except IndexError:
+                # Unknown number of episodes
+                episodes = 0
 
             # Super hard-coded stuff to get airing date
             aired = str(html.find_all('div', class_='spaceit')[1])[62:-9]
@@ -150,7 +156,7 @@ class MALScraper:
             # If last character is a space, day is not zero-padded, so add the 0
             if aired[-1] == ' ':
                 aired = aired[:4] + '0' + aired[4:-1]
-                airing_start_date = datetime.strptime(aired, '%b %d, %Y')
+            airing_start_date = datetime.strptime(aired, '%b %d, %Y')
 
             # Get genres
             genres = []
@@ -220,4 +226,6 @@ class MALScraper:
             if anime_info['score'] != 0:
                 score_sum += anime_info['score']
                 count += 1
+        if count == 0:
+            raise InvalidUserException('User has no scores')
         return User(username=username, mean_score=score_sum/count, anime_list=anime_list)
