@@ -109,10 +109,21 @@ class MALScraper:
             html = BeautifulSoup(raw_html, 'html.parser')
             result = html.find_all('div', class_='spaceit_pad')
 
-            watching = int(re.findall(r'\d+', str(result[-16]).replace(',', ''))[0])
-            completed = int(re.findall(r'\d+', str(result[-15]).replace(',', ''))[0])
-            on_hold = int(re.findall(r'\d+', str(result[-14]).replace(',', ''))[0])
-            dropped = int(re.findall(r'\d+', str(result[-13]).replace(',', ''))[0])
+            # Identify lines that contain the stats
+            for line in result:
+                line = str(line)
+                if 'Watching' in line:
+                    w_line = line
+                elif 'Completed' in line:
+                    c_line = line
+                elif 'On-Hold' in line:
+                    o_line = line
+                elif 'Dropped' in line:
+                    d_line = line
+            watching = int(re.findall(r'\d+', w_line.replace(',', ''))[0])
+            completed = int(re.findall(r'\d+', c_line.replace(',', ''))[0])
+            on_hold = int(re.findall(r'\d+', o_line.replace(',', ''))[0])
+            dropped = int(re.findall(r'\d+', d_line.replace(',', ''))[0])
 
             return watching, completed, on_hold, dropped
         except Exception as e:
