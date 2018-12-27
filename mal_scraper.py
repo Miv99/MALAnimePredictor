@@ -152,7 +152,7 @@ class MALScraper:
             elif html.find('a', href='https://myanimelist.net/topanime.php?type=movie') is not None:
                 anime_type = 'Movie'
             else:
-                raise Exception('This should never appear')
+                anime_type = 'Music'
 
             # Get number of episodes
             break2 = False
@@ -182,10 +182,14 @@ class MALScraper:
                             aired = line[3:16]
                             break2 = True
                             break
-            # Check if day < 10
-            if aired[5] == ',':
-                aired = aired[:4] + '0' + aired[4:-1]
-            airing_start_date = datetime.strptime(aired, '%b %d, %Y\n')
+            # Try different "month, year" and "month day, year"; ignore anime with "year"
+            try:
+                airing_start_date = datetime.strptime(aired, '%b, %Y\n')
+            except ValueError:
+                # Check if day < 10 to 0-pad it
+                if aired[5] == ',':
+                    aired = aired[:4] + '0' + aired[4:-1]
+                airing_start_date = datetime.strptime(aired, '%b %d, %Y\n')
 
             # Get genres
             genres = []
