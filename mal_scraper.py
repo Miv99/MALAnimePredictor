@@ -184,12 +184,16 @@ class MALScraper:
                             break
             # Try different "month, year" and "month day, year"; ignore anime with "year"
             try:
-                airing_start_date = datetime.strptime(aired, '%b, %Y\n')
+                airing_start_date = datetime.strptime(aired[:-4], '%b, %Y\n')
             except ValueError:
                 # Check if day < 10 to 0-pad it
                 if aired[5] == ',':
                     aired = aired[:4] + '0' + aired[4:-1]
-                airing_start_date = datetime.strptime(aired, '%b %d, %Y\n')
+                try:
+                    airing_start_date = datetime.strptime(aired, '%b %d, %Y\n')
+                except ValueError:
+                    # No airing start date
+                    airing_start_date = None
 
             # Get genres
             genres = []
@@ -201,6 +205,9 @@ class MALScraper:
             for studios_text in html.find_all('span', class_='dark_text'):
                 if studios_text.contents[0] == 'Studios:':
                     for text in studios_text.find_next_siblings('a'):
+                        # No studios
+                        if str(text.contents[0]) == 'add some':
+                            break
                         studios.append(str(text.contents[0]))
                     break
 
