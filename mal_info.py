@@ -15,7 +15,7 @@ class User:
 
 class Anime:
     def __init__(self, id='', completed=0, watching=0, dropped=0, mean_score=0.0, genres=[],
-                 anime_type='', episodes=0, airing_start_date=None):
+                 anime_type='', episodes=0, airing_start_date=None, studios=[]):
         # String
         self.id = id
         # Number of people that have completed the anime
@@ -34,6 +34,8 @@ class Anime:
         self.episodes = episodes
         # Anime airing start date as a datetime object
         self.airing_start_date = airing_start_date
+        # Anime studios
+        self.studios = studios
         """"
         # Anime rating (PG, R, etc)
         self.rating = rating

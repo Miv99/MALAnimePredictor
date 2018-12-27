@@ -47,7 +47,7 @@ class MALScraper:
         If the content-type of response is some kind of HTML/XML, return the
         text content, otherwise return None.
         """
-        logging.debug('MALScraper: Requested "' + url + '"')
+        logging.info('MALScraper: Requested "' + url + '"')
 
         # Attempt to get cached result
         cached_result = self.get_cached_result(url)
@@ -59,7 +59,7 @@ class MALScraper:
                 with closing(get(url, stream=True)) as resp:
                     # Encountered 429; sleep and try again
                     if resp.content == b'Too Many Requests\n':
-                        logging.debug('429 Too Many Requests; sleeping for ' + str(self.request_delay) + ' seconds...')
+                        logging.info('429 Too Many Requests; sleeping for ' + str(self.request_delay) + ' seconds...')
                         time.sleep(self.request_delay)
                         continue
 
@@ -83,7 +83,7 @@ class MALScraper:
             raw_html = self.simple_get(ANIME_STATS_URL % anime_id)
             html = BeautifulSoup(raw_html, 'html.parser')
             # Sum of scores
-            sum = 0
+            score_sum = 0
             # Sum of votes
             count = 0
             # Enumerate
@@ -92,9 +92,9 @@ class MALScraper:
                 # Number of votes for this score
                 c = int(re.findall(r'\d+', str(s))[0])
                 count += c
-                sum += c * score
+                score_sum += c * score
                 score -= 1
-            return sum/count
+            return score_sum/count
         except Exception as e:
             raise e
 
@@ -155,31 +155,52 @@ class MALScraper:
                 raise Exception('This should never appear')
 
             # Get number of episodes
+            break2 = False
+            for text in html.find_all('span', class_='dark_text'):
+                if break2:
+                    break
+                if text.contents[0] == 'Episodes:':
+                    for line in text.next_siblings:
+                        if len(line) != 0:
+                            episodes = line
+                            break2 = True
+                            break
             try:
-                episodes = int(re.findall(r'\d+', str(html.find('div', class_='spaceit')))[0])
-            except IndexError:
-                # Unknown number of episodes
+                episodes = int(episodes)
+            except ValueError:
+                # Unknown number of episodes (literally "Unknown")
                 episodes = 0
 
-            # Super hard-coded stuff to get airing date
-            aired = str(html.find_all('div', class_='spaceit')[1])[62:-9]
-            aired = aired[:12]
-            # If last character is a space, day is not zero-padded, so add the 0
-            if aired[-1] == ' ':
+            # Get airing date
+            break2 = False
+            for text in html.find_all('span', class_='dark_text'):
+                if break2:
+                    break
+                if text.contents[0] == 'Aired:':
+                    for line in text.next_siblings:
+                        if len(line) != 0:
+                            aired = line[3:16]
+                            break2 = True
+                            break
+            # Check if day < 10
+            if aired[5] == ',':
                 aired = aired[:4] + '0' + aired[4:-1]
-            airing_start_date = datetime.strptime(aired, '%b %d, %Y')
+            airing_start_date = datetime.strptime(aired, '%b %d, %Y\n')
 
             # Get genres
             genres = []
             for text in html.find_all('a', href=re.compile('/anime/genre/')):
-                text = str(text)
-                # Get text in-between brackets
-                genre = text[(text[:-1].rfind('>') + 1):text.rfind('<')]
-                genres.append(genre)
+                genres.append(str(text.contents[0]))
 
-            #TODO: producers, studios, rating
+            # Get studios
+            studios = []
+            for studios_text in html.find_all('span', class_='dark_text'):
+                if studios_text.contents[0] == 'Studios:':
+                    for text in studios_text.find_next_siblings('a'):
+                        studios.append(str(text.contents[0]))
+                    break
 
-            return anime_type, episodes, airing_start_date, genres
+            return anime_type, episodes, airing_start_date, genres, studios
         except Exception as e:
             raise e
 
@@ -189,11 +210,15 @@ class MALScraper:
 
         Returns a mal_info.Anime object
         """
-        anime_type, episodes, airing_start_date, genres = self.get_anime_info(anime_id)
-        watching, completed, on_hold, dropped = self.get_anime_viewing_stats(anime_id)
-        mean_score = self.get_mean_score(anime_id)
-        return Anime(id=anime_id, completed=completed, watching=watching, dropped=dropped, mean_score=mean_score,
-                     genres=genres, anime_type=anime_type, episodes=episodes, airing_start_date=airing_start_date)
+        try:
+            anime_type, episodes, airing_start_date, genres, studios = self.get_anime_info(anime_id)
+            watching, completed, on_hold, dropped = self.get_anime_viewing_stats(anime_id)
+            mean_score = self.get_mean_score(anime_id)
+            return Anime(id=anime_id, completed=completed, watching=watching, dropped=dropped, mean_score=mean_score,
+                         genres=genres, anime_type=anime_type, episodes=episodes, airing_start_date=airing_start_date,
+                         studios=studios)
+        except Exception as e:
+            raise e
 
     def get_anime_list(self, username):
         """"
@@ -228,15 +253,18 @@ class MALScraper:
 
         Returns a mal_info.User object
         """
-        anime_list = {}
-        score_sum = 0
-        count = 0
-        for anime_info in self.get_anime_list(username):
-            anime_list[anime_info['anime_id']] = (anime_info['status'], anime_info['score'])
-            # Only count anime with scores
-            if anime_info['score'] != 0:
-                score_sum += anime_info['score']
-                count += 1
-        if count == 0:
-            raise InvalidUserException('User has no scores')
-        return User(username=username, mean_score=score_sum/count, anime_list=anime_list)
+        try:
+            anime_list = {}
+            score_sum = 0
+            count = 0
+            for anime_info in self.get_anime_list(username):
+                anime_list[anime_info['anime_id']] = (anime_info['status'], anime_info['score'])
+                # Only count anime with scores
+                if anime_info['score'] != 0:
+                    score_sum += anime_info['score']
+                    count += 1
+            if count == 0:
+                raise InvalidUserException('User has no scores')
+            return User(username=username, mean_score=score_sum/count, anime_list=anime_list)
+        except Exception as e:
+            raise e
