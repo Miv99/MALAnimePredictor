@@ -1,8 +1,10 @@
 import torch
 import user_collector
 from sklearn.model_selection import KFold
-from datetime import datetime
 from collections import defaultdict
+import logging
+from collections import deque
+import os
 
 
 class Network(torch.nn.Module):
@@ -16,15 +18,13 @@ class Network(torch.nn.Module):
         self.linear2 = torch.nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        return self.linear2(torch.nn.functional.relu(self.linear1(x)))
-
+        y = self.linear2(torch.nn.functional.relu(self.linear1(x)))
+        return y
 
 # Dict of Anime ID : mal_info.DatabaseAnime object
 anime_database = user_collector.load_pickle_file('anime_database_test.pickle')
 # List of mal_info.User object
 users_fit = user_collector.load_pickle_file('users_fit_test.pickle').values()
-
-BASELINE_DATE = datetime(year=2000, month=1, day=1)
 
 
 def purge_anime_list(user):
@@ -42,17 +42,8 @@ def purge_anime_list(user):
     return len(new_list)
 
 
-def convert_anime_database(anime_database):
-    """
-    Converts all anime type ONA and OVA to Special
-    """
-
-
 # Remove users with < 30 scored anime
 users_fit = [x for x in users_fit if purge_anime_list(x) >= 30]
-
-# Sort by anime list size for faster batch processing
-#users_fit.sort(reverse=True, key=lambda x: len(x.anime_list))
 
 # Get all genres
 genres = set()
@@ -68,10 +59,14 @@ def get_x_list(anime_database, user, anime_train_ids, anime_test_ids):
     """
     anime_database - Dict of Anime ID : mal_info.DatabaseAnime object
     user - mal_info.User
-    index - current index
+    anime_train_ids - array of anime_ids to use as training
+    anime_test_ids - array of anime_ids to use as validation
 
-    Returns a list of length len(anime_test_indices) of tuples of
-    (anime_id and x tensors), each to be used in separate passes
+    Mean score features are calculated from anime_train_ids
+
+    Returns 2 lists of length len(anime_test_indices) of tuples of
+    (anime_id and tensors), x_list_train and x_list_test
+
     ums = user mean score
     x = [ums, anime_mean_score, ums_of_anime_with_similar_episode_count, ums_of_anime_with_similar_start_date,
         total_people_that_completed_the_anime, percent_of_people_that_dropped_the_anime,
@@ -236,62 +231,167 @@ def get_y(user, anime_id):
 #  ums_of_all_types (0 if type is not the anime's type)]
 INPUT_SIZE = 6 + len(genres) + len(types)
 OUTPUT_SIZE = 1
+
+# ----- HYPERPARAMETERS -----
+LEARNING_RATE = 1e-4
+MOMENTUM = 0.9
 HIDDEN_SIZE = 40
-
-# Tensors to hold input/output
-#x = torch.zeros(BATCH_SIZE, INPUT_SIZE)
-#y = torch.zeros(BATCH_SIZE, OUTPUT_SIZE)
-
-device = torch.device('cuda')
-model = Network(INPUT_SIZE, OUTPUT_SIZE, HIDDEN_SIZE)
-#model.cuda(device)
-
-criterion = torch.nn.MSELoss(reduction='sum')
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
-
+# These ones aren't too important
 MAX_ANIME_PER_FOLD = 200
+MAX_EPOCH = 1
+# ----------------------------
 
-try:
-    for epoch in range(1):
-        i = 0
-        total = len(users_fit)
-        for user in users_fit:
-            kf = KFold(n_splits=max(2, int(len(user.anime_list)/MAX_ANIME_PER_FOLD)), shuffle=True)
-            keys_as_list = list(user.anime_list.keys())
-            for train_indices, validation_indices in kf.split(keys_as_list):
-                train_ids = [keys_as_list[x] for x in train_indices]
-                validation_ids = [keys_as_list[x] for x in validation_indices]
-                x_list_train, x_list_test = get_x_list(anime_database, user, train_ids, validation_ids)
+def train_network():
+    # Uncomment to use GPU
+    # Mine is too old to use CUDA lol
+    device = torch.device('cuda')
+    model = Network(INPUT_SIZE, OUTPUT_SIZE, HIDDEN_SIZE)
+    # model.cuda(device)
 
-                for x in x_list_train:
-                    #print('x:', x[1])
+    criterion = torch.nn.MSELoss(reduction='sum')
+    optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
 
-                    y_pred = model(x[1])
-                    #print('y_pred:', y_pred)
-                    y_correct = get_y(user, x[0])
-                    #print('y_correct:', y_correct)
+    logging.basicConfig(filename='logs/train_network.log',
+                        format='%(asctime)s - %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
+                        level=logging.INFO, filemode='w')
 
-                    loss = criterion(y_pred, y_correct)
-                    #print('loss:', loss.item())
-                    #print('-------------')
+    try:
+        for epoch in range(MAX_EPOCH):
+            i = 0
+            total = len(users_fit)
+            for user in users_fit:
+                kf = KFold(n_splits=max(2, int(len(user.anime_list) / MAX_ANIME_PER_FOLD)), shuffle=True)
+                keys_as_list = list(user.anime_list.keys())
+                for train_indices, validation_indices in kf.split(keys_as_list):
+                    train_ids = [keys_as_list[x] for x in train_indices]
+                    validation_ids = [keys_as_list[x] for x in validation_indices]
+                    x_list_train, x_list_test = get_x_list(anime_database, user, train_ids, validation_ids)
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
+                    for x in x_list_train:
+                        # print('x:', x[1])
 
-                mean_loss_sum = 0
-                for x in x_list_test:
-                    with torch.no_grad():
                         y_pred = model(x[1])
+                        # print('y_pred:', y_pred)
                         y_correct = get_y(user, x[0])
+                        # print('y_correct:', y_correct)
+
                         loss = criterion(y_pred, y_correct)
-                        mean_loss_sum += loss.item()
+                        # print('loss:', loss.item())
+                        # print('-------------')
 
-                print(str(i) + '/' + str(total) + ': '  + str(mean_loss_sum/len(x_list_test)))
-            i += 1
-except KeyboardInterrupt:
-    pass
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
 
-print('Weights: __________________')
-for param in model.parameters():
-    print(param.data)
+                    mean_loss_sum = 0
+                    for x in x_list_test:
+                        with torch.no_grad():
+                            y_pred = model(x[1])
+                            y_correct = get_y(user, x[0])
+                            loss = criterion(y_pred, y_correct)
+                            mean_loss_sum += loss.item()
+
+                    print(str(i) + '/' + str(total) + ': ' + str(mean_loss_sum / len(x_list_test)))
+                    logging.info('epoch ' + str(epoch) + '/' + str(MAX_EPOCH) + ': user ' + str(i) + '/' + str(
+                        total) + ': avg loss = ' + str(mean_loss_sum / len(x_list_test)))
+                i += 1
+    except KeyboardInterrupt:
+        pass
+
+def find_optimal_hidden_size(min_hidden_size, max_hidden_size):
+    """
+    Find optimal hidden dimension
+    """
+
+    # Tuple of hidden size and mean loss over last 100 users
+    losses_by_hidden_size = []
+
+    logging.basicConfig(filename='logs/optimal_hidden_size.log',
+                        format='%(asctime)s - %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
+                        level=logging.INFO, filemode='w')
+    for hidden in range(min_hidden_size, max_hidden_size + 1):
+        logging.info('---------- Hidden dimension ' + str(hidden) + ' ----------')
+
+        # Uncomment to use GPU
+        # Mine is too old to use CUDA lol
+        device = torch.device('cuda')
+        model = Network(INPUT_SIZE, OUTPUT_SIZE, hidden)
+        #model.cuda(device)
+
+        criterion = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
+
+        # Used to calculate mean loss over the last 100 users
+        QUEUE_SIZE = 100
+        mean_losses = deque()
+
+        try:
+            for epoch in range(MAX_EPOCH):
+                i = 0
+                total = len(users_fit)
+                user_mean_loss_sum = 0
+                user_mean_loss_count = 0
+                for user in users_fit:
+                    kf = KFold(n_splits=max(2, int(len(user.anime_list)/MAX_ANIME_PER_FOLD)), shuffle=True)
+                    keys_as_list = list(user.anime_list.keys())
+                    for train_indices, validation_indices in kf.split(keys_as_list):
+                        train_ids = [keys_as_list[x] for x in train_indices]
+                        validation_ids = [keys_as_list[x] for x in validation_indices]
+                        x_list_train, x_list_test = get_x_list(anime_database, user, train_ids, validation_ids)
+
+                        for x in x_list_train:
+                            #print('x:', x[1])
+
+                            y_pred = model(x[1])
+                            #print('y_pred:', y_pred)
+                            y_correct = get_y(user, x[0])
+                            #print('y_correct:', y_correct)
+
+                            loss = criterion(y_pred, y_correct)
+                            #print('loss:', loss.item())
+                            #print('-------------')
+
+                            optimizer.zero_grad()
+                            loss.backward()
+                            optimizer.step()
+
+                        mean_loss_sum = 0
+                        for x in x_list_test:
+                            with torch.no_grad():
+                                y_pred = model(x[1])
+                                y_correct = get_y(user, x[0])
+                                loss = criterion(y_pred, y_correct)
+                                mean_loss_sum += loss.item()
+
+                        user_mean_loss_sum += mean_loss_sum/len(x_list_test)
+                        user_mean_loss_count += 1
+                        #logging.info('epoch ' + str(epoch) + '/' + str(MAX_EPOCH) + ': user ' + str(i) + '/' + str(total) + ': avg loss = ' + str(mean_loss_sum/len(x_list_test)))
+                    mean_losses.append(user_mean_loss_sum/user_mean_loss_count)
+                    logging.info('epoch ' + str(epoch) + ' user ' + str(i) + '/' + str(total) + ': avg loss = ' + str(user_mean_loss_sum/user_mean_loss_count))
+                    print('epoch ' + str(epoch) + ' user ' + str(i) + '/' + str(total) + ': avg loss = ' + str(user_mean_loss_sum/user_mean_loss_count))
+                    if len(mean_losses) > QUEUE_SIZE:
+                        mean_losses.popleft()
+                    i += 1
+        except KeyboardInterrupt:
+            pass
+        finally:
+            avg_of_avg_losses_sum = 0
+            for loss in mean_losses:
+                avg_of_avg_losses_sum += loss
+            avg_of_avg_losses = avg_of_avg_losses_sum/len(mean_losses)
+            logging.info('hidden dimension ' + str(hidden) + ': avg of avg losses = ' + str(avg_of_avg_losses))
+            print('hidden dimension ' + str(hidden) + ': avg of avg losses = ' + str(avg_of_avg_losses))
+            losses_by_hidden_size.append((hidden, avg_of_avg_losses))
+
+    print('Losses by hidden size:')
+    logging.info('Losses by hidden size:')
+    for item in sorted(losses_by_hidden_size, key=lambda x: x[1]):
+        print(item)
+        logging.info(str(item))
+
+
+if __name__ == '__main__':
+    if not os.path.isdir('logs'):
+        os.makedirs('logs')
+
+    find_optimal_hidden_size(10, 60)
