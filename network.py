@@ -106,6 +106,7 @@ for anime in anime_database.values():
             s_t[anime.anime_type] += anime.mean_score
             c_t[anime.anime_type] += 1
 
+
 def reject_outliers(data, m = 2.):
     d = np.abs(data - np.median(data))
     mdev = np.median(d)
@@ -160,6 +161,7 @@ def get_x_list(user, ids):
     ums_by_start_date = defaultdict(lambda:0.)
     ums_by_genre = defaultdict(lambda: 0.)
     ums_by_type = defaultdict(lambda: 0.)
+    ums_by_studio = defaultdict(lambda: 0.)
 
     # Variables for keeping track of sum and count for calculating means
     ums_c = 0
@@ -167,12 +169,14 @@ def get_x_list(user, ids):
     ums_date_c = defaultdict(lambda: 0)
     ums_genres_c = defaultdict(lambda: 0)
     ums_types_c = defaultdict(lambda: 0)
+    ums_studios_c = defaultdict(lambda: 0)
 
     ums_s = 0
     ums_episode_s = defaultdict(lambda: 0)
     ums_date_s = defaultdict(lambda: 0)
     ums_genres_s = defaultdict(lambda: 0)
     ums_types_s = defaultdict(lambda: 0)
+    ums_studios_s = defaultdict(lambda: 0)
 
     for anime_id in ids:
         anime = anime_database[anime_id]
@@ -211,6 +215,10 @@ def get_x_list(user, ids):
         ums_types_c[anime.anime_type] += 1
         ums_types_s[anime.anime_type] += user_score
 
+        for studio in anime.studios:
+            ums_studios_c[studio] += 1
+            ums_studios_s[studio] += user_score
+
     # Calculate all ums stuff
     ums = ums_s/ums_c
     for k in ums_episode_c.keys():
@@ -221,6 +229,8 @@ def get_x_list(user, ids):
         ums_by_genre[k] = ums_genres_s[k]/ums_genres_c[k]
     for k in ums_types_c.keys():
         ums_by_type[k] = ums_types_s[k]/ums_types_c[k]
+    for k in ums_studios_c.keys():
+        ums_by_studio[k] = ums_studios_s[k]/ums_studios_c[k]
 
     for anime_id in ids:
         anime = anime_database[anime_id]
@@ -246,7 +256,14 @@ def get_x_list(user, ids):
         # Will not always be in this range since outliers were removed before finding min and max percent dropped
         x[4] = 10 * (percent_dropped - min_percent_dropped)/(max_percent_dropped - min_percent_dropped)
 
-        i = 5
+        studio_score = 0
+        if len(anime.studios) != 0:
+            for studio in anime.studios:
+                studio_score += ums_by_studio[studio]
+            studio_score /= len(anime.studios)
+        x[5] = studio_score
+
+        i = 6
         for genre in genres:
             if genre in anime.genres:
                 x[i] = ums_by_genre[genre]
@@ -295,7 +312,7 @@ def get_y(user, anime_id):
 #     percent_of_people_that_dropped_the_anime (scaled to be near range [0, 10] before being shifted),
 #     ums_of_all_genres (0 before shift if genre is not part of the anime's genres),
 #     ums_of_all_types (0 before shift if type is not the anime's type)]
-INPUT_SIZE = 5 + len(genres) + len(types)
+INPUT_SIZE = 6 + len(genres) + len(types)
 #INPUT_SIZE = 7 + len(types)
 OUTPUT_SIZE = 1
 
@@ -317,10 +334,6 @@ POINTS_PER_EPOCH = 100
 
 def test():
     torch.manual_seed(44)
-
-    logging.basicConfig(filename='logs/optimal_hidden_size.log',
-                        format='%(asctime)s - %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
-                        level=logging.INFO, filemode='w')
 
     criterion = torch.nn.MSELoss(reduction='mean')
     # Stuff that will be saved and can be loaded
@@ -433,6 +446,10 @@ def test():
         # just to keep track of saved model states
         model_name = input('Enter new model\'s name: ')
         input('')
+
+    logging.basicConfig(filename='logs/' + model_name + '.log',
+                        format='%(asctime)s - %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
+                        level=logging.INFO, filemode='a')
 
     try:
         while epoch < MAX_EPOCH:
