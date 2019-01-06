@@ -15,7 +15,7 @@ class User:
 
 class Anime:
     def __init__(self, id='', completed=0, watching=0, dropped=0, mean_score=0.0, genres=[],
-                 anime_type='', episodes=0, airing_start_date=None, studios=[]):
+                 anime_type='', episodes=0, airing_start_date=None, studios=[], staff={}):
         # String
         self.id = id
         # Number of people that have completed the anime
@@ -36,20 +36,10 @@ class Anime:
         self.airing_start_date = airing_start_date
         # Anime studios
         self.studios = studios
-        """"
-        # Anime rating (PG, R, etc)
-        self.rating = rating
-        # All important staff IDs as ints
-        self.directors = directors
-        self.producers = producers
-        self.storyboards = storyboards
-        self.scripts = scripts
-        self.musics = musics
-        self.sound_directors = sound_directors
-        self.main_voice_actors = main_voice_actors
-        self.original_creators = original_creators
-        self.animation_directors = animation_directors
-        self.episode_directors = episode_directors
-        """
+        # Dict of staff position string (Director, Producer, etc) : set of people_ids
+        # staff['Voice Actor'] contains a dict with keys 'Main' and 'Supporting' and values
+        # sets of people_ids of main/supporting voice actors
+        self.staff = {}
+
     def __repr__(self):
         return '<mal_info.Anime object: ' + str(self.__dict__) + '>'

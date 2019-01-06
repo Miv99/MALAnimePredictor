@@ -215,6 +215,58 @@ class MALScraper:
         except Exception as e:
             raise e
 
+    def get_staff(self, anime_id):
+        """"
+        anime_id - string
+
+        Returns an anime's staff, a dict of position strings as key and list of people_ids as value
+        """
+        try:
+            raw_html = self.simple_get(ANIME_CHARACTERS_URL % anime_id)
+            html = BeautifulSoup(raw_html, 'html.parser')
+
+            # Get staff
+            staff = {}
+            staff['Voice Actor'] = {}
+            staff['Voice Actor']['Main'] = set()
+            staff['Voice Actor']['Supporting'] = set()
+            for staff_text in html.find_all('a', href=re.compile('/people/')):
+                if staff_text.find_next_sibling('div') is None:
+                    continue
+
+                # Extract person_id from href
+                people_id = re.findall(r'\d+', str(staff_text))[0]
+
+                positions = str(staff_text.find_next_sibling('div').find('small').contents[0]).split(', ')
+
+                for position in positions:
+                    if staff.get(position) is None:
+                        staff[position] = set()
+                    staff[position].add(people_id)
+
+            # Get voice actors
+            for a in html.find_all('a', href=re.compile('/character/')):
+                try:
+                    if a.find_next_sibling('div') is None:
+                        continue
+
+                    character_type = str(a.find_next_sibling('div').find('small').contents[0])
+                    va = a.find_parent('td').find_next_sibling('td').find('table').find('tr').find('td').find('a')
+
+                    # Extract person_id from href
+                    people_id = re.findall(r'\d+', str(va))[0]
+
+                    if str(va.find_next_sibling('small').contents[0]) == 'Japanese':
+                        staff['Voice Actor'][character_type].add(people_id)
+                except AttributeError:
+                    # No VA listed for this character
+                    #print('No voice actor found for ' + str(a.contents[0]) + ' in anime_id ' + anime_id)
+                    logging.info('No voice actor found for ' + str(a.contents[0]) + ' in anime_id ' + str(anime_id))
+
+            return staff
+        except Exception as e:
+            raise e
+
     def get_anime(self, anime_id):
         """"
         anime_id - string
@@ -225,9 +277,10 @@ class MALScraper:
             anime_type, episodes, airing_start_date, genres, studios = self.get_anime_info(anime_id)
             watching, completed, on_hold, dropped = self.get_anime_viewing_stats(anime_id)
             mean_score = self.get_mean_score(anime_id)
+            staff = self.get_staff(anime_id)
             return Anime(id=anime_id, completed=completed, watching=watching, dropped=dropped, mean_score=mean_score,
                          genres=genres, anime_type=anime_type, episodes=episodes, airing_start_date=airing_start_date,
-                         studios=studios)
+                         studios=studios, staff=staff)
         except Exception as e:
             raise e
 
