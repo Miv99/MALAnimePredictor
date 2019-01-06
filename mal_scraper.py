@@ -227,9 +227,6 @@ class MALScraper:
 
             # Get staff
             staff = {}
-            staff['Voice Actor'] = {}
-            staff['Voice Actor']['Main'] = set()
-            staff['Voice Actor']['Supporting'] = set()
             for staff_text in html.find_all('a', href=re.compile('/people/')):
                 if staff_text.find_next_sibling('div') is None:
                     continue
@@ -239,10 +236,10 @@ class MALScraper:
 
                 positions = str(staff_text.find_next_sibling('div').find('small').contents[0]).split(', ')
 
+                if staff.get(people_id) is None:
+                    staff[people_id] = set()
                 for position in positions:
-                    if staff.get(position) is None:
-                        staff[position] = set()
-                    staff[position].add(people_id)
+                    staff[people_id].add(position)
 
             # Get voice actors
             for a in html.find_all('a', href=re.compile('/character/')):
@@ -257,10 +254,12 @@ class MALScraper:
                     people_id = re.findall(r'\d+', str(va))[0]
 
                     if str(va.find_next_sibling('small').contents[0]) == 'Japanese':
-                        staff['Voice Actor'][character_type].add(people_id)
+                        if staff.get(people_id) is None:
+                            staff[people_id] = set()
+                        staff[people_id].add(character_type)
                 except AttributeError:
                     # No VA listed for this character
-                    #print('No voice actor found for ' + str(a.contents[0]) + ' in anime_id ' + anime_id)
+                    # print('No voice actor found for ' + str(a.contents[0]) + ' in anime_id ' + anime_id)
                     logging.info('No voice actor found for ' + str(a.contents[0]) + ' in anime_id ' + str(anime_id))
 
             return staff

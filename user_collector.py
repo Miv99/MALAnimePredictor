@@ -193,7 +193,8 @@ def get_staff(anime_database_pickle_file_name, autosave_period):
                 autosave_counter += 1
                 try:
                     anime_database[anime_id].staff = scraper.get_staff(anime_id)
-                    logger.info('user_collector: Retrieved staff for anime id "' + str(anime_id) + '"')
+                    logger.info('user_collector: Retrieved staff for anime id "' + str(anime_id) + '": '
+                                + str(anime_database[anime_id].staff))
 
                     if autosave_counter % autosave_period == 0:
                         back_up(None, anime_database, None, anime_database_pickle_file_name)

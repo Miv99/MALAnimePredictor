@@ -36,9 +36,8 @@ class Anime:
         self.airing_start_date = airing_start_date
         # Anime studios
         self.studios = studios
-        # Dict of staff position string (Director, Producer, etc) : set of people_ids
-        # staff['Voice Actor'] contains a dict with keys 'Main' and 'Supporting' and values
-        # sets of people_ids of main/supporting voice actors
+        # Dict of people_id : staff position string (Director, Producer, etc)
+        # Voice actors listed as 'Main' and/or 'Supporting'
         self.staff = {}
 
     def __repr__(self):
