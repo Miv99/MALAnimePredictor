@@ -1,3 +1,5 @@
+test10 but with anime studio
+
 # ----- HYPERPARAMETERS -----
 LEARNING_RATE = 1e-3
 MOMENTUM = 0
