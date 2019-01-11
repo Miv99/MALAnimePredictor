@@ -188,7 +188,7 @@ def get_staff(anime_database_pickle_file_name, autosave_period):
                     logger.critical(e)
                 except Exception as e:
                     logger.fatal(e)
-            elif not hasattr(anime_database[anime_id], 'staff') or len(anime_database[anime_id].staff) == 0:
+            elif not hasattr(anime_database[anime_id], 'staff'):
                 logger.info('user_collector: Requesting staff for anime id "' + str(anime_id) + '"')
                 autosave_counter += 1
                 try:
@@ -206,6 +206,11 @@ def get_staff(anime_database_pickle_file_name, autosave_period):
                 logger.info('user_collector: Skipping anime id "' + str(anime_id) + '"; staff data already exists')
     except KeyboardInterrupt:
         logger.info('user_collector: Keyboard-interrupted')
+        a = 0
+        for anime_id in anime_database.keys():
+            if not hasattr(anime_database[anime_id], 'staff'):
+                a += 1
+        print(str(a) + ' left')
     except Exception as e:
         print(e)
 
