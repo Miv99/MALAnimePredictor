@@ -173,6 +173,10 @@ def get_x_list(user, ids):
         ums_of_all_genres (0 before shift if genre is not part of the anime's genres),
         ums_of_all_types (0 before shift if type is not the anime's type)]
     """
+    shuffle(ids)
+    ids_for_ums_calculation = [x for x in ids[0:int(len(ids) * 0.8)]]
+    ids_for_training = [x for x in ids[int(len(ids) * 0.8):len(ids)]]
+
     x_list = []
 
     ums = 0
@@ -206,7 +210,7 @@ def get_x_list(user, ids):
     # which this people_id was working as this combined role
     ums_people_s = defaultdict(lambda: defaultdict(lambda: 0))
 
-    for anime_id in ids:
+    for anime_id in ids_for_ums_calculation:
         anime = anime_database[anime_id]
         # Skip type music
         if anime.anime_type == 'Music':
@@ -267,7 +271,7 @@ def get_x_list(user, ids):
     for k in ums_studios_c.keys():
         ums_by_studio[k] = ums_studios_s[k] / ums_studios_c[k]
 
-    for anime_id in ids:
+    for anime_id in ids_for_training:
         anime = anime_database[anime_id]
         # Skip type music
         if anime.anime_type == 'Music':
@@ -335,7 +339,7 @@ def get_x_list(user, ids):
                     if get_combined_role_name(role) == combined_role_name:
                         role_sum += ums_people_s[people_id][combined_role_name]
                         role_count += ums_people_c[people_id][combined_role_name]
-            if role_count == 0:
+            if role_count <= 0:
                 x[i] = 0
             else:
                 x[i] = role_sum / role_count
