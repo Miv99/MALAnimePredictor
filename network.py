@@ -106,7 +106,6 @@ for anime in anime_database.values():
             s_t[anime.anime_type] += anime.mean_score
             c_t[anime.anime_type] += 1
 
-
 def reject_outliers(data, m = 2.):
     d = np.abs(data - np.median(data))
     mdev = np.median(d)
@@ -131,6 +130,30 @@ for genre in genres:
 # ums of all types
 for anime_type in types:
     feature_mean_value.append(s_t[anime_type]/c_t[anime_type])
+
+combined_roles = {'Art Director' : ['Art Director', 'Director of Photography'],
+         'Design' : ['Original Character Design', 'Character Design', 'Color Design', 'Mechanical Design'],
+         'Writing' : ['Screenplay', 'Script', 'Series Composition'],
+         'Animation Director' : ['Storyboard', 'Assistant Animation Director', 'Animation Director', 'Chief Animation Director'],
+         'Animation' : ['Special Effects', 'Key Animation', 'Principle Drawing', '2nd Key Animation', 'Background Art', 'Animation Check', 'Digital Paint', 'Editing', 'In-Between Animation'],
+         'Sound' : ['Sound Director', 'Sound Effects'],
+         'Producer' : ['Executive Producer', 'Chief Producer', 'Producer', 'Assistant Producer', 'Production Coordination'],
+         'Setting' : ['Setting', 'Color Setting'],
+         'Director' : ['Assistant Director', 'Episode Director', 'Director'],
+         'Creator' : ['Creator', 'Original Creator'],
+         'Planning' : ['Planning', 'Layout'],
+         'Music' : ['Music'],
+         'Main VA' : ['Main'],
+         'Supporting VA' : ['Supporting'] }
+# To maintain order, just in case
+all_combined_role_names = list(combined_roles.keys())
+
+
+def get_combined_role_name(role_name):
+    for combined_name, roles in combined_roles.items():
+        if role_name in roles:
+            return combined_name
+    return None
 
 
 def get_x_list(user, ids):
@@ -158,7 +181,7 @@ def get_x_list(user, ids):
     ums_by_episode_count = defaultdict(lambda: 0.)
     # Same^; +- 3 months
     # Dict with key of tuple (month, year) and value of ums
-    ums_by_start_date = defaultdict(lambda:0.)
+    ums_by_start_date = defaultdict(lambda: 0.)
     ums_by_genre = defaultdict(lambda: 0.)
     ums_by_type = defaultdict(lambda: 0.)
     ums_by_studio = defaultdict(lambda: 0.)
@@ -170,6 +193,7 @@ def get_x_list(user, ids):
     ums_genres_c = defaultdict(lambda: 0)
     ums_types_c = defaultdict(lambda: 0)
     ums_studios_c = defaultdict(lambda: 0)
+    ums_people_c = defaultdict(lambda: defaultdict(lambda: 0))
 
     ums_s = 0
     ums_episode_s = defaultdict(lambda: 0)
@@ -177,6 +201,10 @@ def get_x_list(user, ids):
     ums_genres_s = defaultdict(lambda: 0)
     ums_types_s = defaultdict(lambda: 0)
     ums_studios_s = defaultdict(lambda: 0)
+    # Dict with key of people_id and value of
+    # dict with keys combined_roles.keys() and value of sum of user scores of all anime in
+    # which this people_id was working as this combined role
+    ums_people_s = defaultdict(lambda: defaultdict(lambda: 0))
 
     for anime_id in ids:
         anime = anime_database[anime_id]
@@ -219,18 +247,25 @@ def get_x_list(user, ids):
             ums_studios_c[studio] += 1
             ums_studios_s[studio] += user_score
 
+        for people_id, roles in anime.staff.items():
+            for role in roles:
+                combined_name = get_combined_role_name(role)
+                if combined_name is not None:
+                    ums_people_c[people_id][combined_name] += 1
+                    ums_people_s[people_id][combined_name] += user_score
+
     # Calculate all ums stuff
-    ums = ums_s/ums_c
+    ums = ums_s / ums_c
     for k in ums_episode_c.keys():
-        ums_by_episode_count[k] = ums_episode_s[k]/ums_episode_c[k]
+        ums_by_episode_count[k] = ums_episode_s[k] / ums_episode_c[k]
     for k in ums_date_c.keys():
-        ums_by_start_date[k] = ums_date_s[k]/ums_date_c[k]
+        ums_by_start_date[k] = ums_date_s[k] / ums_date_c[k]
     for k in ums_genres_c.keys():
-        ums_by_genre[k] = ums_genres_s[k]/ums_genres_c[k]
+        ums_by_genre[k] = ums_genres_s[k] / ums_genres_c[k]
     for k in ums_types_c.keys():
-        ums_by_type[k] = ums_types_s[k]/ums_types_c[k]
+        ums_by_type[k] = ums_types_s[k] / ums_types_c[k]
     for k in ums_studios_c.keys():
-        ums_by_studio[k] = ums_studios_s[k]/ums_studios_c[k]
+        ums_by_studio[k] = ums_studios_s[k] / ums_studios_c[k]
 
     for anime_id in ids:
         anime = anime_database[anime_id]
@@ -249,9 +284,9 @@ def get_x_list(user, ids):
         else:
             x[3] = ums_by_start_date[(anime.airing_start_date.month, anime.airing_start_date.year)]
         # Get as a percent of most watched anime
-        #x[4] = (anime.watching + anime.completed)/most_watched
-        #x[4] = 5
-        percent_dropped = anime.dropped/(anime.watching + anime.completed + anime.dropped)
+        # x[4] = (anime.watching + anime.completed)/most_watched
+        # x[4] = 5
+        percent_dropped = anime.dropped / (anime.watching + anime.completed + anime.dropped)
         # Scale to be near range [0, 10]
         # Will not always be in this range since outliers were removed before finding min and max percent dropped
         x[4] = 10 * (percent_dropped - min_percent_dropped)/(max_percent_dropped - min_percent_dropped)
@@ -291,6 +326,21 @@ def get_x_list(user, ids):
                 x[i] = 0
             i += 1
 
+        # considering only related roles
+        for combined_role_name in all_combined_role_names:
+            role_sum = 0
+            role_count = 0
+            for people_id, roles in anime.staff.items():
+                for role in roles:
+                    if get_combined_role_name(role) == combined_role_name:
+                        role_sum += ums_people_s[people_id][combined_role_name]
+                        role_count += ums_people_c[people_id][combined_role_name]
+            if role_count == 0:
+                x[i] = 0
+            else:
+                x[i] = role_sum / role_count
+            i += 1
+
         # Shift so mean is 0
         for j in range(i):
             if x[j] != 0:
@@ -312,14 +362,14 @@ def get_y(user, anime_id):
 #     percent_of_people_that_dropped_the_anime (scaled to be near range [0, 10] before being shifted),
 #     ums_of_all_genres (0 before shift if genre is not part of the anime's genres),
 #     ums_of_all_types (0 before shift if type is not the anime's type)]
-INPUT_SIZE = 6 + len(genres) + len(types)
+INPUT_SIZE = 6 + len(genres) + len(types) + len(combined_roles)
 #INPUT_SIZE = 7 + len(types)
 OUTPUT_SIZE = 1
 
 # ----- HYPERPARAMETERS -----
 LEARNING_RATE = 1e-3
 MOMENTUM = 0
-HIDDEN_SIZE = 20
+HIDDEN_SIZE = 25
 LR_SCHEDULER_GAMMA = 0.3
 #LR_SCHEDULER_STEP_SIZE = 1
 LR_SCHEDULER_MILESTONES = [2, 4]
